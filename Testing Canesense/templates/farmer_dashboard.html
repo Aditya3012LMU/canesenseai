@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farmer Dashboard — CANESENSE NIR</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+  <style>
+    #dataTable_wrapper .dataTables_filter label,
+    #dataTable_wrapper .dataTables_length label { color: var(--text-md); font-size: 0.8rem; }
+    table.dataTable thead th { background: #0d0d0d; border-bottom: 1px solid var(--border) !important; }
+    table.dataTable tbody tr { background: var(--bg-card); }
+    table.dataTable tbody tr:hover { background: var(--bg-card-hover) !important; }
+    table.dataTable tbody td { border-top: 1px solid #111 !important; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <div class="brand"><span class="brand-icon">🌿</span><div>CANESENSE NIR</div></div>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/realtime">Live Prediction</a></li>
+      <li><a href="/farmer" class="active">Farmer Results</a></li>
+      <li><a href="/payment">Payment Calc</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h2>🔍 Farmer Result Dashboard</h2>
+    <p>Search farmer batches by ID or name to view detailed quality analytics</p>
+  </div>
+
+  <!-- SEARCH BAR -->
+  <div class="search-bar">
+    <input type="text" id="searchInput" class="form-control" placeholder="Enter Farmer ID or Farmer Name…" onkeydown="if(event.key==='Enter') searchFarmer()">
+    <button class="btn btn-primary" onclick="searchFarmer()">🔍 Search</button>
+    <button class="btn btn-outline" onclick="loadAll()">All Batches</button>
+  </div>
+
+  <!-- FARMER SELECTOR (when multiple results) -->
+  <div id="farmerSelector" style="display:none; margin-bottom:20px;">
+    <label class="form-label">Multiple batches found — select one:</label>
+    <select id="farmerSelect" class="form-control" style="max-width:400px;" onchange="selectFarmer(this.value)"></select>
+  </div>
+
+  <!-- FARMER INFO BANNER -->
+  <div id="farmerBanner" style="display:none;" class="card mb-2" style="border-color:var(--green-border);">
+    <div class="row" style="align-items:center; gap:20px;">
+      <div>
+        <div style="font-size:1.5rem; color:var(--green); font-weight:700;" id="bFarmerName">—</div>
+        <div style="font-size:0.8rem; color:var(--text-lo);">ID: <span id="bFarmerId">—</span> &nbsp;|&nbsp; Scanned: <span id="bTimestamp">—</span></div>
+      </div>
+      <div style="margin-left:auto;">
+        <a id="paymentLink" href="/payment" class="btn btn-outline" style="font-size:0.8rem;">💰 Calculate Payment</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid" id="farmerKPI" style="display:none;">
+    <div class="kpi-card"><div class="kpi-label">Avg Total Sugar (TS)</div><div class="kpi-value" id="fTS">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Fiber (ADF)</div><div class="kpi-value" id="fADF" style="color:var(--yellow);">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Protein (CP)</div><div class="kpi-value" id="fCP" style="color:#4fc3f7;">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Digestibility</div><div class="kpi-value" id="fIVOMD" style="color:#ce93d8;">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted Pol %</div><div class="kpi-value" id="fPol">—</div><div class="kpi-unit">sucrose</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total Samples</div><div class="kpi-value" id="fCount" style="color:var(--text-hi);">—</div><div class="kpi-unit">scanned</div></div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="chart-grid" id="farmerCharts" style="display:none;">
+    <div class="chart-card">
+      <div class="chart-title">📊 Sugar Distribution (TS per Sample)</div>
+      <div class="chart-wrap"><canvas id="fSugarBar"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">⚖️ Fiber vs Sugar (ADF vs TS)</div>
+      <div class="chart-wrap"><canvas id="fScatter"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">🥧 Quality Composition</div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="fPie"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">📊 Chemical Parameter Summary</div>
+      <div class="chart-wrap"><canvas id="fParamBar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- DATA TABLE -->
+  <div id="tableSection" style="display:none;" class="mb-3">
+    <div class="table-wrap">
+      <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="margin:0; font-size:0.9rem;">Sample-Level Results</h3>
+        <button class="btn btn-outline" onclick="exportFarmerCSV()" style="padding:5px 12px; font-size:0.78rem;">⬇ Export CSV</button>
+      </div>
+      <table id="dataTable" class="display" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Sample ID</th>
+            <th>Total Sugar (TS)</th>
+            <th>Fiber (ADF)</th>
+            <th>Protein (CP)</th>
+            <th>Digestibility (IVOMD)</th>
+            <th>Pol %</th>
+            <th>Quality</th>
+          </tr>
+        </thead>
+        <tbody id="farmerTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div id="emptyState" class="card text-center" style="padding:40px;">
+    <div style="font-size:3rem; margin-bottom:12px;">🔍</div>
+    <div style="color:var(--text-md); font-size:0.95rem;">Search for a farmer or load all batches to view results.</div>
+    <div style="color:var(--text-lo); font-size:0.8rem; margin-top:8px;">Run predictions in the <a href="/realtime">Live Prediction</a> module first.</div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Chart defaults ─────────────────────────────────────────────────────
+Chart.defaults.color            = '#888';
+Chart.defaults.borderColor      = '#1a1a1a';
+const GREEN  = '#00ff41', YELLOW = '#ffd600', RED = '#ff3b3b', BLUE = '#4fc3f7', PURPLE = '#ce93d8';
+const qualityColor = q => q === 'High' ? GREEN : q === 'Medium' ? YELLOW : RED;
+
+let fSugarChart, fScatterChart, fPieChart, fParamChart;
+let dtInstance = null;
+let currentSamples = [];
+let allResults = [];
+
+// ── DataTable setup ────────────────────────────────────────────────────
+function initDataTable() {
+  if (dtInstance) { dtInstance.destroy(); }
+  dtInstance = $('#dataTable').DataTable({
+    order:    [[0, 'asc']],
+    pageLength: 25,
+    language: { search: 'Filter:' },
+    columnDefs: [{ targets: 6, orderable: false }],
+  });
+}
+
+// ── Chart init ─────────────────────────────────────────────────────────
+function initCharts() {
+  const base = { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color:'#888', boxWidth:12, font:{size:11} } } } };
+
+  fSugarChart = new Chart(document.getElementById('fSugarBar'), {
+    type: 'bar',
+    data: { labels:[], datasets:[{ label:'Total Sugar (TS)', data:[],
+      backgroundColor:[], borderRadius:3, borderWidth:0 }] },
+    options: { ...base, scales: {
+      x: { ticks:{color:'#555',maxRotation:60,font:{size:10}}, grid:{color:'#111'} },
+      y: { ticks:{color:'#888'}, grid:{color:'#1a1a1a'}, title:{display:true,text:'TS %',color:'#666'} }
+    }, plugins: { ...base.plugins, tooltip:{
+      callbacks:{ label: ctx => `TS: ${ctx.parsed.y}%` }
+    } } }
+  });
+
+  fScatterChart = new Chart(document.getElementById('fScatter'), {
+    type: 'scatter',
+    data: { datasets:[{ label:'Samples', data:[],
+      backgroundColor: ctx => {
+        const q = ctx.raw && ctx.raw.quality;
+        return q === 'High' ? 'rgba(0,255,65,0.7)' : q === 'Medium' ? 'rgba(255,214,0,0.7)' : 'rgba(255,59,59,0.7)';
+      },
+      pointRadius:6 }] },
+    options: { ...base, scales:{
+      x:{ticks:{color:'#888'},grid:{color:'#1a1a1a'},title:{display:true,text:'ADF (Fiber %)',color:'#666'}},
+      y:{ticks:{color:'#888'},grid:{color:'#1a1a1a'},title:{display:true,text:'TS (Sugar %)',color:'#666'}}
+    } }
+  });
+
+  fPieChart = new Chart(document.getElementById('fPie'), {
+    type: 'doughnut',
+    data: { labels:['High','Medium','Low'], datasets:[{
+      data:[0,0,0], backgroundColor:['rgba(0,255,65,0.8)','rgba(255,214,0,0.8)','rgba(255,59,59,0.8)'],
+      borderColor:['#00ff41','#ffd600','#ff3b3b'], borderWidth:1
+    }] },
+    options: { ...base, cutout:'60%', plugins:{
+      legend:{ position:'bottom', labels:{ color:'#888', font:{size:11} } }
+    } }
+  });
+
+  fParamChart = new Chart(document.getElementById('fParamBar'), {
+    type: 'bar',
+    data: { labels:['Total Sugar\n(TS)','Fiber\n(ADF)','Protein\n(CP)','Digestibility\n(IVOMD)','Pol %'],
+      datasets:[{ label:'Average Value', data:[0,0,0,0,0],
+        backgroundColor:[GREEN+'CC',YELLOW+'CC',BLUE+'CC',PURPLE+'CC',GREEN+'88'],
+        borderRadius:4, borderWidth:0 }] },
+    options: { ...base, scales:{
+      x:{ticks:{color:'#888'},grid:{color:'#111'}},
+      y:{ticks:{color:'#888'},grid:{color:'#1a1a1a'}}
+    } }
+  });
+}
+
+// ── Populate farmer view ───────────────────────────────────────────────
+function populateFarmer(batch) {
+  currentSamples = batch.samples || [];
+  document.getElementById('bFarmerName').textContent = batch.farmer_name || '—';
+  document.getElementById('bFarmerId').textContent   = batch.farmer_id   || '—';
+  const ts = batch.timestamp ? batch.timestamp.split('T')[0] : '—';
+  document.getElementById('bTimestamp').textContent  = ts;
+
+  // KPIs
+  document.getElementById('fTS').textContent    = batch.average_TS    || '—';
+  document.getElementById('fADF').textContent   = batch.average_ADF   || '—';
+  document.getElementById('fCP').textContent    = batch.average_CP    || '—';
+  document.getElementById('fIVOMD').textContent = batch.average_IVOMD || '—';
+  document.getElementById('fPol').textContent   = (batch.predicted_pol || '—') + (batch.predicted_pol ? '%' : '');
+  document.getElementById('fCount').textContent = batch.samples_scanned || currentSamples.length;
+
+  // Show sections
+  ['farmerBanner','farmerKPI','farmerCharts','tableSection'].forEach(id => {
+    document.getElementById(id).style.display = '';
+  });
+  document.getElementById('emptyState').style.display = 'none';
+
+  // ── Charts ─────────────────────────────────────────────────────────
+  const labels  = currentSamples.map(s => s.sample_id);
+  const tsVals  = currentSamples.map(s => s.TS);
+  const bgColors = currentSamples.map(s =>
+    s.quality === 'High' ? 'rgba(0,255,65,0.75)' :
+    s.quality === 'Medium' ? 'rgba(255,214,0,0.75)' : 'rgba(255,59,59,0.75)');
+
+  fSugarChart.data.labels = labels;
+  fSugarChart.data.datasets[0].data            = tsVals;
+  fSugarChart.data.datasets[0].backgroundColor = bgColors;
+  fSugarChart.update();
+
+  fScatterChart.data.datasets[0].data = currentSamples.map(s => ({
+    x: s.ADF, y: s.TS, quality: s.quality, id: s.sample_id
+  }));
+  fScatterChart.update();
+
+  const qc = batch.quality_counts || { High:0, Medium:0, Low:0 };
+  fPieChart.data.datasets[0].data = [qc.High||0, qc.Medium||0, qc.Low||0];
+  fPieChart.update();
+
+  const avgs = [batch.average_TS, batch.average_ADF, batch.average_CP, batch.average_IVOMD, batch.predicted_pol];
+  fParamChart.data.datasets[0].data = avgs.map(v => v || 0);
+  fParamChart.update();
+
+  // ── Table ──────────────────────────────────────────────────────────
+  const tbody = document.getElementById('farmerTableBody');
+  tbody.innerHTML = '';
+  currentSamples.forEach(s => {
+    const badge = `<span class="badge badge-${s.quality.toLowerCase()}">${s.quality}</span>`;
+    tbody.innerHTML += `<tr>
+      <td style="color:var(--green)">${s.sample_id}</td>
+      <td>${s.TS}</td>
+      <td style="color:var(--yellow)">${s.ADF}</td>
+      <td style="color:#4fc3f7">${s.CP}</td>
+      <td style="color:#ce93d8">${s.IVOMD}</td>
+      <td style="font-weight:700">${s.Pol}%</td>
+      <td>${badge}</td>
+    </tr>`;
+  });
+  initDataTable();
+}
+
+// ── Search ─────────────────────────────────────────────────────────────
+async function searchFarmer() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) { loadAll(); return; }
+  try {
+    const res = await fetch(`/farmer/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    handleResults(data);
+  } catch(e) { showToast('Search failed: ' + e.message); }
+}
+
+async function loadAll() {
+  try {
+    const res = await fetch('/data');
+    const data = await res.json();
+    handleResults(data);
+  } catch(e) { showToast('Failed to load data'); }
+}
+
+function handleResults(data) {
+  allResults = data;
+  if (!data || data.length === 0) {
+    ['farmerBanner','farmerKPI','farmerCharts','tableSection','farmerSelector'].forEach(id => {
+      document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('emptyState').style.display = '';
+    showToast('No results found.');
+    return;
+  }
+  if (data.length === 1) {
+    document.getElementById('farmerSelector').style.display = 'none';
+    populateFarmer(data[0]);
+  } else {
+    // Show selector
+    const sel = document.getElementById('farmerSelect');
+    sel.innerHTML = '';
+    data.forEach((f, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${f.farmer_id} — ${f.farmer_name} (${f.samples_scanned} samples, ${f.timestamp ? f.timestamp.split('T')[0] : '—'})`;
+      sel.appendChild(opt);
+    });
+    document.getElementById('farmerSelector').style.display = '';
+    populateFarmer(data[0]);
+  }
+}
+
+function selectFarmer(idx) {
+  if (allResults[idx]) populateFarmer(allResults[idx]);
+}
+
+function exportFarmerCSV() {
+  if (!currentSamples.length) return;
+  const h = 'sample_id,TS,ADF,CP,IVOMD,Pol,quality\n';
+  const rows = currentSamples.map(s =>
+    `${s.sample_id},${s.TS},${s.ADF},${s.CP},${s.IVOMD},${s.Pol},${s.quality}`).join('\n');
+  const blob = new Blob([h + rows], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `farmer_${document.getElementById('bFarmerId').textContent}_results.csv`;
+  a.click();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+initCharts();
+loadAll();
+</script>
+</body>
+</html>

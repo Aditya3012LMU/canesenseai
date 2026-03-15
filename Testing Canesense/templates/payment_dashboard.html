@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Calculator — CANESENSE NIR</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    .split-layout { display:grid; grid-template-columns:380px 1fr; gap:24px; align-items:start; }
+    @media(max-width:900px){ .split-layout{ grid-template-columns:1fr; } }
+    .formula-box {
+      background:#0a0a0a; border:1px solid #1a1a1a; border-radius:8px;
+      padding:14px 16px; font-size:0.8rem; color:var(--text-md);
+      margin-bottom:16px; line-height:2;
+    }
+    .formula-box code { color:var(--green); font-size:0.85rem; }
+  </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <div class="brand"><span class="brand-icon">🌿</span><div>CANESENSE NIR</div></div>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/realtime">Live Prediction</a></li>
+      <li><a href="/farmer">Farmer Results</a></li>
+      <li><a href="/payment" class="active">Payment Calc</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h2>💰 Payment Calculator</h2>
+    <p>Compute fair cane payment per farmer batch using the sucrose-fiber quality formula</p>
+  </div>
+
+  <div class="split-layout">
+    <!-- LEFT — Input panel -->
+    <div>
+      <div class="card mb-2">
+        <h3 style="margin-bottom:14px;">Formula</h3>
+        <div class="formula-box">
+          <code>Payment = W × P_b × (Pol / Pol_std) × Q_f</code><br>
+          <code>Q_f = 1 − α × (ADF − ADF_std)</code>
+        </div>
+        <div style="font-size:0.75rem;color:var(--text-lo);line-height:1.9;">
+          W — weight delivered (tons)<br>
+          P_b — base price per ton<br>
+          Pol — avg predicted sucrose %<br>
+          Pol_std — industry standard sucrose %<br>
+          ADF — avg predicted fiber %<br>
+          ADF_std — standard fiber %<br>
+          α — fiber penalty factor
+        </div>
+      </div>
+
+      <div class="card mb-2">
+        <h3 style="margin-bottom:14px;">Farmer Selection</h3>
+        <div class="form-group">
+          <label class="form-label">Select Farmer Batch</label>
+          <select id="farmerSelect" class="form-control" onchange="onFarmerSelect(this.value)">
+            <option value="">— Select a farmer —</option>
+          </select>
+        </div>
+        <div id="autoFilled" style="font-size:0.75rem;color:var(--green);display:none;">
+          ✓ Pol % and ADF auto-filled from scan data
+        </div>
+      </div>
+
+      <div class="card mb-2">
+        <h3 style="margin-bottom:14px;">Payment Parameters</h3>
+
+        <div class="form-group">
+          <label class="form-label">Farmer ID / Name</label>
+          <input id="inFarmerLabel" class="form-control" type="text" placeholder="Auto-filled or enter manually" readonly style="color:var(--green);">
+        </div>
+        <div class="row" style="gap:12px;">
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">Weight (tons) W</label>
+              <input id="inWeight" class="form-control" type="number" step="0.1" placeholder="e.g. 25" value="25">
+            </div>
+          </div>
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">Base Price / ton (P_b)</label>
+              <input id="inBasePrice" class="form-control" type="number" step="0.1" placeholder="e.g. 3000" value="3000">
+            </div>
+          </div>
+        </div>
+        <div class="row" style="gap:12px;">
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">Pol % (Predicted)</label>
+              <input id="inPolAvg" class="form-control" type="number" step="0.01" placeholder="e.g. 12.5">
+            </div>
+          </div>
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">Standard Pol % (Pol_std)</label>
+              <input id="inPolStd" class="form-control" type="number" step="0.01" placeholder="e.g. 11" value="11">
+            </div>
+          </div>
+        </div>
+        <div class="row" style="gap:12px;">
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">ADF % (Predicted)</label>
+              <input id="inAdfAvg" class="form-control" type="number" step="0.01" placeholder="e.g. 32.5">
+            </div>
+          </div>
+          <div class="col" style="min-width:140px;">
+            <div class="form-group">
+              <label class="form-label">Standard ADF % (ADF_std)</label>
+              <input id="inAdfStd" class="form-control" type="number" step="0.01" placeholder="e.g. 30" value="30">
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fiber Penalty Factor (α)</label>
+          <input id="inAlpha" class="form-control" type="number" step="0.001" placeholder="e.g. 0.02" value="0.02">
+        </div>
+        <button class="btn btn-primary w-100" onclick="calculatePayment()">💰 Calculate Payment</button>
+        <div style="margin-top:8px;">
+          <button class="btn btn-outline w-100" onclick="addToComparison()">+ Add to Comparison</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — Results panel -->
+    <div>
+      <!-- Single result card -->
+      <div id="resultSection" style="display:none;">
+        <div class="payment-result-card">
+          <div style="font-size:0.72rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-lo);margin-bottom:8px;">FINAL PAYMENT</div>
+          <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:16px;">
+            <div class="payment-currency">₹</div>
+            <div class="payment-amount" id="paymentAmount">0</div>
+          </div>
+
+          <div class="param-grid">
+            <div class="param-item"><div class="param-val" id="rWeight">—</div><div class="param-lbl">Weight (t)</div></div>
+            <div class="param-item"><div class="param-val" id="rPolRatio">—</div><div class="param-lbl">Pol Ratio</div></div>
+            <div class="param-item"><div class="param-val" id="rQF">—</div><div class="param-lbl">Quality Factor</div></div>
+            <div class="param-item"><div class="param-val" id="rBasePrice">—</div><div class="param-lbl">Base Price</div></div>
+          </div>
+
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;">
+            <div style="flex:1;min-width:120px;background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;padding:12px;text-align:center;">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--green);" id="rPol">—</div>
+              <div style="font-size:0.68rem;color:var(--text-lo);margin-top:2px;">Pol %</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;padding:12px;text-align:center;">
+              <div style="font-size:1.1rem;font-weight:700;color:var(--yellow);" id="rADF">—</div>
+              <div style="font-size:0.68rem;color:var(--text-lo);margin-top:2px;">ADF %</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;padding:12px;text-align:center;">
+              <div style="font-size:1.1rem;font-weight:700;" id="rQFColor">—</div>
+              <div style="font-size:0.68rem;color:var(--text-lo);margin-top:2px;">Q_f</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakdown chart -->
+        <div class="chart-card mb-2">
+          <div class="chart-title">💹 Payment Breakdown</div>
+          <div class="chart-wrap" style="height:220px;"><canvas id="breakdownChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="calcEmpty" class="card text-center" style="padding:40px;">
+        <div style="font-size:3rem;margin-bottom:12px;">💰</div>
+        <div style="color:var(--text-md);font-size:0.95rem;">Fill in the parameters and click Calculate Payment.</div>
+        <div style="color:var(--text-lo);font-size:0.8rem;margin-top:8px;">Select a farmer from the dropdown to auto-fill Pol % and ADF.</div>
+      </div>
+
+      <!-- Comparison table -->
+      <div id="compSection" style="display:none;" class="mb-3">
+        <div class="table-wrap">
+          <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; font-size:0.9rem;">Farmer Payment Comparison</h3>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-outline" onclick="exportComparison()" style="padding:5px 12px;font-size:0.78rem;">⬇ Export</button>
+              <button class="btn btn-danger" onclick="clearComparison()" style="padding:5px 12px;font-size:0.78rem;">✕ Clear</button>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table>
+              <thead><tr>
+                <th>Farmer</th><th>Weight (t)</th><th>Pol %</th><th>ADF %</th>
+                <th>Q_f</th><th>Pol Ratio</th><th>Payment (₹)</th>
+              </tr></thead>
+              <tbody id="compBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="chart-card mt-2">
+          <div class="chart-title">📊 Payment Comparison</div>
+          <div class="chart-wrap"><canvas id="compChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+Chart.defaults.color       = '#888';
+Chart.defaults.borderColor = '#1a1a1a';
+const GREEN = '#00ff41', YELLOW = '#ffd600', RED = '#ff3b3b';
+
+let breakdownChart = null, compChart = null;
+let compRows = [];
+let farmersData = [];
+
+// ── Load farmers ───────────────────────────────────────────────────────
+async function loadFarmers() {
+  try {
+    const res = await fetch('/data/farmers');
+    farmersData = await res.json();
+    const sel = document.getElementById('farmerSelect');
+    sel.innerHTML = '<option value="">— Select a farmer —</option>';
+    farmersData.forEach((f, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = `${f.farmer_id} — ${f.farmer_name} (Pol: ${f.predicted_pol}%, ADF: ${f.average_ADF}%)`;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+function onFarmerSelect(idx) {
+  if (idx === '') return;
+  const f = farmersData[parseInt(idx)];
+  if (!f) return;
+  document.getElementById('inFarmerLabel').value = `${f.farmer_id} — ${f.farmer_name}`;
+  document.getElementById('inPolAvg').value  = f.predicted_pol || '';
+  document.getElementById('inAdfAvg').value  = f.average_ADF   || '';
+  document.getElementById('autoFilled').style.display = '';
+}
+
+// ── Calculate ──────────────────────────────────────────────────────────
+async function calculatePayment() {
+  const weight     = parseFloat(document.getElementById('inWeight').value);
+  const basePrice  = parseFloat(document.getElementById('inBasePrice').value);
+  const polAvg     = parseFloat(document.getElementById('inPolAvg').value);
+  const polStd     = parseFloat(document.getElementById('inPolStd').value);
+  const adfAvg     = parseFloat(document.getElementById('inAdfAvg').value);
+  const adfStd     = parseFloat(document.getElementById('inAdfStd').value);
+  const alpha      = parseFloat(document.getElementById('inAlpha').value);
+
+  if ([weight, basePrice, polAvg, polStd, adfAvg, adfStd, alpha].some(isNaN)) {
+    showToast('⚠ Please fill in all numeric fields.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/payment/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ weight, base_price: basePrice, pol_avg: polAvg,
+        pol_std: polStd, adf_avg: adfAvg, adf_std: adfStd, alpha })
+    });
+    const data = await res.json();
+    if (data.error) { showToast('Error: ' + data.error); return; }
+    displayResult(data);
+  } catch(e) { showToast('Calculation failed: ' + e.message); }
+}
+
+function displayResult(d) {
+  document.getElementById('resultSection').style.display = '';
+  document.getElementById('calcEmpty').style.display = 'none';
+
+  const fmt = n => parseFloat(n).toLocaleString('en-IN', {minimumFractionDigits:2});
+  document.getElementById('paymentAmount').textContent = fmt(d.payment);
+  document.getElementById('rWeight').textContent    = d.weight;
+  document.getElementById('rPolRatio').textContent  = d.pol_ratio;
+  document.getElementById('rQF').textContent        = d.quality_factor;
+  document.getElementById('rBasePrice').textContent = fmt(d.base_price);
+  document.getElementById('rPol').textContent       = d.pol_avg + '%';
+  document.getElementById('rADF').textContent       = d.adf_avg + '%';
+
+  const qfEl = document.getElementById('rQFColor');
+  qfEl.textContent  = d.quality_factor;
+  qfEl.style.color  = d.quality_factor >= 1 ? GREEN : d.quality_factor >= 0.9 ? YELLOW : RED;
+
+  // Breakdown chart
+  if (breakdownChart) breakdownChart.destroy();
+  breakdownChart = new Chart(document.getElementById('breakdownChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Base Value\n(W × P_b)', 'After Pol Ratio\n(× Pol_ratio)', 'Final Payment\n(× Q_f)'],
+      datasets: [{
+        label: 'Payment (₹)',
+        data: [
+          d.weight * d.base_price,
+          d.weight * d.base_price * d.pol_ratio,
+          d.payment
+        ],
+        backgroundColor: ['rgba(0,255,65,0.3)', 'rgba(0,255,65,0.55)', 'rgba(0,255,65,0.85)'],
+        borderColor: [GREEN, GREEN, GREEN],
+        borderWidth: 1, borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { ticks:{color:'#888'}, grid:{color:'#111'} },
+        y: { ticks:{color:'#888', callback: v => '₹' + v.toLocaleString()}, grid:{color:'#1a1a1a'} }
+      }
+    }
+  });
+}
+
+// ── Comparison ─────────────────────────────────────────────────────────
+function addToComparison() {
+  const label = document.getElementById('inFarmerLabel').value || 'Unnamed';
+  const weight    = parseFloat(document.getElementById('inWeight').value)    || 0;
+  const basePrice = parseFloat(document.getElementById('inBasePrice').value)  || 0;
+  const polAvg    = parseFloat(document.getElementById('inPolAvg').value)     || 0;
+  const polStd    = parseFloat(document.getElementById('inPolStd').value)     || 1;
+  const adfAvg    = parseFloat(document.getElementById('inAdfAvg').value)     || 0;
+  const adfStd    = parseFloat(document.getElementById('inAdfStd').value)     || 30;
+  const alpha     = parseFloat(document.getElementById('inAlpha').value)      || 0.02;
+
+  const qf      = 1 - alpha * (adfAvg - adfStd);
+  const polRatio = polAvg / polStd;
+  const payment  = weight * basePrice * polRatio * qf;
+
+  compRows.push({ label, weight, polAvg, adfAvg, qf: qf.toFixed(4), polRatio: polRatio.toFixed(4),
+    payment: payment.toFixed(2) });
+
+  renderComparison();
+  showToast('✓ Added to comparison');
+}
+
+function renderComparison() {
+  if (!compRows.length) { document.getElementById('compSection').style.display='none'; return; }
+  document.getElementById('compSection').style.display = '';
+
+  const tbody = document.getElementById('compBody');
+  tbody.innerHTML = '';
+  const maxPay = Math.max(...compRows.map(r => parseFloat(r.payment)));
+  compRows.forEach(r => {
+    const payNum = parseFloat(r.payment);
+    const color  = payNum >= maxPay * 0.9 ? GREEN : payNum >= maxPay * 0.7 ? YELLOW : RED;
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:700;">${r.label}</td>
+      <td>${r.weight}</td>
+      <td style="color:${GREEN}">${r.polAvg}%</td>
+      <td style="color:${YELLOW}">${r.adfAvg}%</td>
+      <td>${r.qf}</td>
+      <td>${r.polRatio}</td>
+      <td style="color:${color};font-weight:700;">₹ ${parseFloat(r.payment).toLocaleString('en-IN')}</td>
+    </tr>`;
+  });
+
+  // Comparison chart
+  if (compChart) compChart.destroy();
+  compChart = new Chart(document.getElementById('compChart'), {
+    type: 'bar',
+    data: {
+      labels: compRows.map(r => r.label),
+      datasets: [{
+        label: 'Final Payment (₹)',
+        data: compRows.map(r => parseFloat(r.payment)),
+        backgroundColor: compRows.map(r => {
+          const p = parseFloat(r.payment);
+          return p >= maxPay*0.9 ? 'rgba(0,255,65,0.7)' : p >= maxPay*0.7 ? 'rgba(255,214,0,0.7)' : 'rgba(255,59,59,0.7)';
+        }),
+        borderRadius: 4, borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false} },
+      scales: {
+        x: { ticks:{color:'#888', maxRotation:30}, grid:{color:'#111'} },
+        y: { ticks:{color:'#888', callback: v => '₹' + v.toLocaleString()}, grid:{color:'#1a1a1a'} }
+      }
+    }
+  });
+}
+
+function clearComparison() {
+  compRows = [];
+  document.getElementById('compSection').style.display = 'none';
+}
+
+function exportComparison() {
+  if (!compRows.length) return;
+  const h = 'Farmer,Weight(t),Pol%,ADF%,QualityFactor,PolRatio,Payment\n';
+  const rows = compRows.map(r =>
+    `"${r.label}",${r.weight},${r.polAvg},${r.adfAvg},${r.qf},${r.polRatio},${r.payment}`).join('\n');
+  const blob = new Blob([h + rows], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'payment_comparison.csv';
+  a.click();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+loadFarmers();
+</script>
+</body>
+</html>

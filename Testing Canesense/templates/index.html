@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CANESENSE NIR — Industrial Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .scan-line {
+      position: fixed; top: 0; left: 0; width: 100%; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      animation: scanLine 4s linear infinite; z-index: 1000; opacity: 0.5;
+    }
+    @keyframes scanLine { from { transform: translateX(-100%); } to { transform: translateX(100vw); } }
+    .brand-tagline { font-size: 0.72rem; color: var(--text-lo); letter-spacing: 0.2em; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+<div class="scan-line"></div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <div class="brand">
+      <span class="brand-icon">🌿</span>
+      <div>
+        <div>CANESENSE NIR</div>
+        <div class="brand-tagline">Sugar Mill Analytics</div>
+      </div>
+    </div>
+    <ul class="nav-links">
+      <li><a href="/" class="active">Home</a></li>
+      <li><a href="/realtime">Live Prediction</a></li>
+      <li><a href="/farmer">Farmer Results</a></li>
+      <li><a href="/payment">Payment Calc</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="container">
+  <div class="hero">
+    <h1>🌿 CANESENSE NIR</h1>
+    <p>Industrial Near-Infrared Spectroscopy Platform for real-time sugarcane quality assessment and automated farmer payment calculation.</p>
+    <div class="d-flex gap-2" style="justify-content:center; flex-wrap:wrap;">
+      <a href="/realtime" class="btn btn-primary">⚡ Start Live Prediction</a>
+      <a href="/farmer" class="btn btn-outline">🔍 View Farmer Results</a>
+      <a href="/payment" class="btn btn-outline">💰 Payment Calculator</a>
+    </div>
+  </div>
+
+  <!-- LIVE METRICS BAR -->
+  <div class="metrics-bar" id="metricsBar">
+    <div class="metric-item"><div class="val" id="totalFarmers">—</div><div class="lbl">Farmers Scanned</div></div>
+    <div class="metric-item"><div class="val" id="totalSamples">—</div><div class="lbl">Total Samples</div></div>
+    <div class="metric-item"><div class="val" id="avgPol">—</div><div class="lbl">Avg Pol %</div></div>
+    <div class="metric-item"><div class="val" id="avgTS">—</div><div class="lbl">Avg Total Sugar</div></div>
+    <div class="metric-item"><div class="val" id="modelR2">—</div><div class="lbl">Model R² (TS)</div></div>
+  </div>
+
+  <!-- MODULE CARDS -->
+  <div class="module-grid">
+    <a href="/realtime" style="text-decoration:none;">
+      <div class="module-card">
+        <span class="module-arrow">→</span>
+        <div class="module-icon">⚡</div>
+        <div class="module-title">Real-Time Prediction</div>
+        <div class="module-desc">Upload a NIR CSV file and watch PLSR predictions build sample by sample with live chart updates. Quality grades assigned instantly.</div>
+      </div>
+    </a>
+    <a href="/farmer" style="text-decoration:none;">
+      <div class="module-card">
+        <span class="module-arrow">→</span>
+        <div class="module-icon">🔍</div>
+        <div class="module-title">Farmer Dashboard</div>
+        <div class="module-desc">Search any farmer by ID or name. View detailed sugar, fiber, protein and digestibility analytics with sample-level breakdown tables.</div>
+      </div>
+    </a>
+    <a href="/payment" style="text-decoration:none;">
+      <div class="module-card">
+        <span class="module-arrow">→</span>
+        <div class="module-icon">💰</div>
+        <div class="module-title">Payment Calculator</div>
+        <div class="module-desc">Compute fair cane payments using the sucrose-fiber quality formula. Compare multiple farmer batches and export results.</div>
+      </div>
+    </a>
+  </div>
+
+  <!-- MODEL INFO -->
+  <div class="card mb-3">
+    <h3 style="margin-bottom:16px;">PLSR Model Performance</h3>
+    <div id="modelInfo" class="row" style="gap:12px;">
+      <div style="color:var(--text-lo); font-size:0.85rem;">Loading model metrics…</div>
+    </div>
+  </div>
+
+  <!-- RECENT ACTIVITY -->
+  <div class="card mb-3">
+    <div class="d-flex align-center gap-2 mb-2" style="justify-content:space-between;">
+      <h3 style="margin:0;">Recent Farmer Batches</h3>
+      <a href="/farmer" class="btn btn-outline" style="padding:5px 12px; font-size:0.78rem;">View All →</a>
+    </div>
+    <div id="recentActivity">
+      <div style="color:var(--text-lo); font-size:0.85rem; padding:20px 0;">No prediction results yet. Upload a CSV to get started.</div>
+    </div>
+  </div>
+
+  <div style="text-align:center; padding:20px 0; color:var(--text-lo); font-size:0.78rem;">
+    CANESENSE NIR v1.0 — PLSR Spectral Analysis Engine &nbsp;|&nbsp; Model: PLSRegression (sklearn)
+  </div>
+</div>
+
+<script>
+async function loadMetrics() {
+  try {
+    const res = await fetch('/model/info');
+    if (!res.ok) return;
+    const m = await res.json();
+    const r2 = m.r2_scores || {};
+    document.getElementById('modelR2').textContent = (r2.TS || 0).toFixed(3);
+    const params = ['TS','CP','ADF','IVOMD'];
+    const colors = { TS:'var(--green)', CP:'#4fc3f7', ADF:'var(--yellow)', IVOMD:'#ce93d8' };
+    let html = '';
+    params.forEach(p => {
+      const r = (r2[p] || 0).toFixed(3);
+      const pct = Math.max(0, Math.min(100, (r2[p] || 0) * 100));
+      html += `<div class="col" style="min-width:180px;">
+        <div style="font-size:0.75rem;color:var(--text-lo);margin-bottom:4px;">${p}</div>
+        <div style="font-size:1.2rem;font-weight:700;color:${colors[p]};margin-bottom:6px;">R² = ${r}</div>
+        <div class="progress-wrap" style="height:5px;">
+          <div class="progress-bar" style="width:${pct}%;background:${colors[p]};"></div>
+        </div>
+      </div>`;
+    });
+    html += `<div class="col" style="min-width:180px; border-left:1px solid var(--border); padding-left:16px;">
+      <div style="font-size:0.72rem;color:var(--text-lo);margin-bottom:6px;">Model Info</div>
+      <div style="font-size:0.82rem;color:var(--text-md);">
+        Components: <span style="color:var(--green);">${m.n_components}</span><br>
+        Training samples: <span style="color:var(--green);">${m.n_samples_train}</span><br>
+        Features: <span style="color:var(--green);">${m.n_features}</span><br>
+        Range: <span style="color:var(--green);font-size:0.75rem;">${m.wavelength_range || '—'}</span>
+      </div>
+    </div>`;
+    document.getElementById('modelInfo').innerHTML = html;
+  } catch(e) {
+    document.getElementById('modelInfo').innerHTML = '<div style="color:var(--red);font-size:0.82rem;">Failed to load model metrics. Is the server running?</div>';
+  }
+}
+
+async function loadDashboardStats() {
+  try {
+    const res = await fetch('/data/farmers');
+    if (!res.ok) return;
+    const farmers = await res.json();
+    document.getElementById('totalFarmers').textContent = farmers.length;
+    const totalSamples = farmers.reduce((s, f) => s + (f.samples_scanned || 0), 0);
+    document.getElementById('totalSamples').textContent = totalSamples;
+    if (farmers.length > 0) {
+      const avgPol = farmers.reduce((s, f) => s + (f.predicted_pol || 0), 0) / farmers.length;
+      const avgTS  = farmers.reduce((s, f) => s + (f.average_TS  || 0), 0) / farmers.length;
+      document.getElementById('avgPol').textContent = avgPol.toFixed(1) + '%';
+      document.getElementById('avgTS').textContent  = avgTS.toFixed(1);
+    }
+    // Recent activity table
+    if (farmers.length === 0) return;
+    let html = '<table style="width:100%;"><thead><tr>';
+    ['Farmer ID','Farmer Name','Samples','Avg TS','Avg ADF','Avg Pol %','Date'].forEach(h => {
+      html += `<th style="padding:8px 12px;font-size:0.68rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-lo);text-align:left;">${h}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    farmers.slice(-8).reverse().forEach(f => {
+      const date = f.timestamp ? f.timestamp.split('T')[0] : '—';
+      html += `<tr style="border-bottom:1px solid #111;">
+        <td style="padding:9px 12px;font-size:0.82rem;color:var(--green);">${f.farmer_id}</td>
+        <td style="padding:9px 12px;font-size:0.82rem;">${f.farmer_name}</td>
+        <td style="padding:9px 12px;font-size:0.82rem;color:var(--text-md);">${f.samples_scanned}</td>
+        <td style="padding:9px 12px;font-size:0.82rem;">${f.average_TS}</td>
+        <td style="padding:9px 12px;font-size:0.82rem;color:var(--yellow);">${f.average_ADF}</td>
+        <td style="padding:9px 12px;font-size:0.82rem;color:var(--green);font-weight:700;">${f.predicted_pol}%</td>
+        <td style="padding:9px 12px;font-size:0.78rem;color:var(--text-lo);">${date}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('recentActivity').innerHTML = html;
+  } catch(e) {}
+}
+
+loadMetrics();
+loadDashboardStats();
+</script>
+</body>
+</html>

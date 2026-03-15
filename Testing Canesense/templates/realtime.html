@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Prediction — CANESENSE NIR</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="container">
+    <div class="brand"><span class="brand-icon">🌿</span><div>CANESENSE NIR</div></div>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/realtime" class="active">Live Prediction</a></li>
+      <li><a href="/farmer">Farmer Results</a></li>
+      <li><a href="/payment">Payment Calc</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h2>⚡ Real-Time Prediction Dashboard</h2>
+    <p>Upload a NIR CSV file to start live row-by-row PLSR predictions with 2-second cadence</p>
+  </div>
+
+  <!-- UPLOAD PANEL -->
+  <div class="upload-panel" id="uploadPanel">
+    <div class="row" style="align-items:flex-end; gap:16px; flex-wrap:wrap;">
+      <!-- File selector -->
+      <div style="flex:2; min-width:240px;">
+        <label class="upload-label">NIR SCAN FILE (.csv)</label>
+        <div class="file-display" id="fileDisplay" onclick="document.getElementById('fileInput').click()">
+          <span>📂</span><span id="fileName">Click to select CSV file…</span>
+        </div>
+        <input type="file" id="fileInput" accept=".csv">
+      </div>
+      <!-- Farmer ID -->
+      <div style="flex:1; min-width:160px;">
+        <label class="upload-label">Farmer ID</label>
+        <input type="text" id="farmerId" class="form-control" placeholder="e.g. FRM-001" value="">
+      </div>
+      <!-- Farmer Name -->
+      <div style="flex:1; min-width:160px;">
+        <label class="upload-label">Farmer Name</label>
+        <input type="text" id="farmerName" class="form-control" placeholder="e.g. Ravi Kumar" value="">
+      </div>
+      <!-- Start button -->
+      <div>
+        <button id="startBtn" class="btn btn-primary" onclick="startPrediction()" disabled>
+          ⚡ Upload &amp; Predict
+        </button>
+      </div>
+      <!-- Stop button -->
+      <div>
+        <button id="stopBtn" class="btn btn-danger" onclick="stopPrediction()" style="display:none;">
+          ■ Stop
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div id="progressSection" style="margin-top:20px; display:none;">
+      <div class="d-flex align-center gap-2" style="margin-bottom:8px; justify-content:space-between;">
+        <span id="statusBadge" class="status-badge status-idle">● IDLE</span>
+        <span id="progressLabel" style="font-size:0.8rem; color:var(--text-md);">0 / 0 samples</span>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div id="currentSample" style="font-size:0.75rem; color:var(--text-lo); margin-top:6px;">Waiting…</div>
+    </div>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="kpi-card"><div class="kpi-label">Avg Total Sugar (TS)</div><div class="kpi-value" id="kpiTS">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Fiber (ADF)</div><div class="kpi-value" id="kpiADF" style="color:var(--yellow);">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Protein (CP)</div><div class="kpi-value" id="kpiCP" style="color:#4fc3f7;">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Avg Digestibility (IVOMD)</div><div class="kpi-value" id="kpiIVOMD" style="color:#ce93d8;">—</div><div class="kpi-unit">%</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted Pol %</div><div class="kpi-value" id="kpiPol">—</div><div class="kpi-unit">sucrose</div></div>
+    <div class="kpi-card"><div class="kpi-label">Samples Processed</div><div class="kpi-value" id="kpiCount" style="color:var(--text-hi);">0</div><div class="kpi-unit">samples</div></div>
+  </div>
+
+  <!-- CHARTS ROW 1 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">📊 Sugar Distribution (TS per Sample)</div>
+      <div class="chart-wrap"><canvas id="sugarBar"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">⚖️ Fiber vs Sugar (ADF vs TS)</div>
+      <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 2 -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">🥧 Quality Composition</div>
+      <div class="chart-wrap" style="height:220px;"><canvas id="pieChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">📈 Running Average — Chemical Parameters</div>
+      <div class="chart-wrap"><canvas id="avgLine"></canvas></div>
+    </div>
+  </div>
+
+  <!-- LIVE TABLE -->
+  <div class="table-wrap mb-3">
+    <div style="padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <h3 style="margin:0; font-size:0.9rem;">Live Prediction Results</h3>
+      <button class="btn btn-outline" onclick="exportCSV()" style="padding:5px 12px; font-size:0.78rem;" id="exportBtn" disabled>⬇ Export CSV</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Sample ID</th>
+            <th>Total Sugar (TS)</th>
+            <th>Fiber (ADF)</th>
+            <th>Protein (CP)</th>
+            <th>Digestibility</th>
+            <th>Pol %</th>
+            <th>Quality</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody">
+          <tr><td colspan="7" style="text-align:center; color:var(--text-lo); padding:30px;">Upload a CSV file and start prediction to see results here.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/realtime.js"></script>
+</body>
+</html>

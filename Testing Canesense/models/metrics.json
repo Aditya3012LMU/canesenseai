@@ -1,0 +1,25 @@
+{
+  "model": "PLSRegression",
+  "n_components": 10,
+  "n_samples_train": 57,
+  "n_features": 228,
+  "target_params": [
+    "TS",
+    "CP",
+    "ADF",
+    "IVOMD"
+  ],
+  "r2_scores": {
+    "TS": 0.9419,
+    "CP": 0.8249,
+    "ADF": 0.9057,
+    "IVOMD": 0.906
+  },
+  "rmse_scores": {
+    "TS": 4.0364,
+    "CP": 0.8238,
+    "ADF": 2.7072,
+    "IVOMD": 4.6092
+  },
+  "wavelength_range": "901.0285 \u2013 1700.8384 nm"
+}
